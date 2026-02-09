@@ -6,12 +6,18 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/a36fc168"):
     """
     尝试登录 hub.weirdhost.xyz 并点击 "시간 추가" 按钮。
     优先使用 REMEMBER_WEB_COOKIE 进行会话登录，如果不存在则回退到邮箱密码登录。
+    支持通过 SOCKS5 代理运行。
     此函数设计为每次GitHub Actions运行时执行一次。
     """
     # 从环境变量获取登录凭据
     remember_web_cookie = os.environ.get('REMEMBER_WEB_COOKIE')
     pterodactyl_email = os.environ.get('PTERODACTYL_EMAIL')
     pterodactyl_password = os.environ.get('PTERODACTYL_PASSWORD')
+    
+    # 从环境变量获取代理配置
+    proxy_server = os.environ.get('PROXY_SERVER')  # 格式: socks5://host:port
+    proxy_username = os.environ.get('PROXY_USERNAME')  # 可选
+    proxy_password = os.environ.get('PROXY_PASSWORD')  # 可选
 
     # 检查是否提供了任何登录凭据
     if not (remember_web_cookie or (pterodactyl_email and pterodactyl_password)):
@@ -19,8 +25,28 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/a36fc168"):
         return False
 
     with sync_playwright() as p:
-        # 在 GitHub Actions 中，使用 headless 无头模式运行
-        browser = p.chromium.launch(headless=True)
+        # 配置浏览器启动参数
+        browser_args = {
+            'headless': True
+        }
+        
+        # 如果提供了代理服务器，添加代理配置
+        if proxy_server:
+            print(f"检测到代理配置: {proxy_server}")
+            proxy_config = {
+                'server': proxy_server
+            }
+            # 如果提供了代理用户名和密码，添加认证信息
+            if proxy_username and proxy_password:
+                proxy_config['username'] = proxy_username
+                proxy_config['password'] = proxy_password
+                print("已配置代理认证信息。")
+            browser_args['proxy'] = proxy_config
+        else:
+            print("未检测到代理配置，将直接连接。")
+        
+        # 启动浏览器
+        browser = p.chromium.launch(**browser_args)
         page = browser.new_page()
         # 增加默认超时时间到90秒，以应对网络波动和慢加载
         page.set_default_timeout(90000)
